@@ -1,0 +1,319 @@
+سلام
+ببخشید بنده گیت رو نصب نداشتم و زمان و حجم کافی برای نصب اون رو هم نداشتم. لذا متن کد رو ارسال می کنم. میبخشید.
+import java.sql.*;
+import java.util.HashSet;
+import java.util.Scanner;
+
+public class LibrarySystem {
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        try (Connection connection = DatabaseConnection.getConnection()) {
+            System.out.println("Welcome to the Library System!");
+            int flag = 1;
+            int userId = -1;
+
+            while (flag == 1) {
+                flag = 0;
+                System.out.println("Choose an option:");
+                System.out.println("1. Log in to an existing account");
+                System.out.println("2. Register a new account");
+                System.out.print("Enter choice: ");
+                int loginChoice = scanner.nextInt();
+                scanner.nextLine();
+
+                String name;
+
+                switch (loginChoice) {
+                    case 1:
+                        System.out.print("Enter your name: ");
+                        name = scanner.nextLine();
+                        userId = User.getUserId(connection, name);
+                        if (userId == -1) {
+                            System.err.println("Error: User not found. Please register first.");
+                            flag = 1;
+                        }
+                        break;
+                    case 2:
+                        System.out.print("Enter your name: ");
+                        name = scanner.nextLine();
+                        if (User.getUserId(connection, name) != -1) {
+                            System.err.println("Error: Username already exists. Please choose a different name.");
+                            flag = 1;
+                        }
+                        userId = User.registerUser(connection, name);
+                        System.out.println("Registration successful! Your user ID is: " + userId);
+                        break;
+                    default:
+                        System.err.println("Invalid choice. Exiting...");
+                        flag = 1;
+                }
+            }
+
+            while (true) {
+                System.out.println("Choose an option:");
+                System.out.println("1. Add a new interest");
+                System.out.println("2. Add a book to an existing interest");
+                System.out.println("3. Display your books");
+                System.out.println("4. View books by topic");
+                System.out.println("5. Exit");
+                System.out.print("Enter choice: ");
+                int choice = scanner.nextInt();
+                scanner.nextLine();
+
+                switch (choice) {
+                    case 1:
+                        System.out.print("Enter your new interest: ");
+                        String newInterest = scanner.nextLine();
+                        Interest.addInterest(connection, userId, newInterest);
+                        break;
+                    case 2:
+                        System.out.println("Choose an interest:");
+                        Interest.displayInterests(connection, userId);
+                        System.out.print("Enter interest ID: ");
+                        int interestId = scanner.nextInt();
+                        scanner.nextLine();
+                        System.out.print("Enter book title: ");
+                        String bookTitle = scanner.nextLine();
+                        Book.addBook(connection, interestId, bookTitle);
+                        break;
+                    case 3:
+                        Book.displayBooks(connection, userId);
+                        break;
+                    case 4:
+                        System.out.print("Enter the topic to view books: ");
+                        String topic = scanner.nextLine();
+                        Book.displayBooksByTopic(connection, topic);
+                        break;
+                    case 5:
+                        System.out.println("Goodbye!");
+                        return;
+                    default:
+                        System.out.println("Invalid choice. Try again.");
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("An error occurred: " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            scanner.close();
+        }
+    }
+}
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+
+public class DatabaseConnection {
+    private static final String URL = "jdbc:mysql://localhost:3306/LibraryDB";
+    private static final String USER = "root";
+    private static final String PASSWORD = "4570176501";
+
+    public static Connection getConnection() throws SQLException {
+        return DriverManager.getConnection(URL, USER, PASSWORD);
+    }
+}
+
+import java.sql.*;
+import java.util.HashSet;
+
+public class Book {
+    public static void addBook(Connection connection, int interestId, String bookTitle) throws SQLException {
+        String query = "INSERT INTO Books (interest_id, book_title) VALUES (?, ?)";
+        try (PreparedStatement pstmt = connection.prepareStatement(query)) {
+            pstmt.setInt(1, interestId);
+            pstmt.setString(2, bookTitle);
+            int affectedRows = pstmt.executeUpdate();
+            if (affectedRows > 0) {
+                System.out.println("Book added successfully.");
+            } else {
+                System.out.println("Failed to add book.");
+            }
+        }
+    }
+
+    public static void displayBooks(Connection connection, int userId) throws SQLException {
+        String query = "SELECT b.book_title FROM Books b " +
+                       "JOIN Interests i ON b.interest_id = i.id " +
+                       "WHERE i.user_id = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(query)) {
+            pstmt.setInt(1, userId);
+            ResultSet rs = pstmt.executeQuery();
+            if (!rs.isBeforeFirst()) {
+                System.out.println("No books found for this user.");
+            } else {
+                System.out.println("Books you have read:");
+                while (rs.next()) {
+                    String title = rs.getString("book_title");
+                    try {
+                        String language = LanguageDetector.detectLanguage(title);
+                        System.out.println("- " + title + " in " + language + " language");
+                    } catch (Exception e) {
+                        System.err.println("Error detecting language for book: " + title);
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }
+    }
+
+    public static void displayBooksByTopic(Connection connection, String topic) throws SQLException {
+        String query = "SELECT DISTINCT b.book_title FROM Books b " +
+                       "JOIN Interests i ON b.interest_id = i.id " +
+                       "WHERE i.interest = ?";
+        HashSet<String> uniqueBooks = new HashSet<>();
+        try (PreparedStatement pstmt = connection.prepareStatement(query)) {
+            pstmt.setString(1, topic);
+            ResultSet rs = pstmt.executeQuery();
+            if (!rs.isBeforeFirst()) {
+                System.out.println("No books found for the topic: " + topic);
+            } else {
+                System.out.println("Books available in the topic '" + topic + "':");
+                while (rs.next()) {
+                    String title = rs.getString("book_title");
+                    try {
+                        String language = LanguageDetector.detectLanguage(title);
+                        uniqueBooks.add(title+ " in " + language + " language");
+                    } catch (Exception e) {
+                        uniqueBooks.add(title);
+                    }
+                }
+                for (String title : uniqueBooks) {
+                    System.out.println("- " + title);
+                }
+            }
+        }
+    }
+}
+
+import java.sql.*;
+import java.util.HashSet;
+
+public class Interest {
+    public static int addInterest(Connection connection, int userId, String interest) throws SQLException {
+        String query = "INSERT INTO Interests (user_id, interest) VALUES (?, ?)";
+        try (PreparedStatement pstmt = connection.prepareStatement(query, Statement.RETURN_GENERATED_KEYS)) {
+            pstmt.setInt(1, userId);
+            pstmt.setString(2, interest);
+            int affectedRows = pstmt.executeUpdate();
+            if (affectedRows > 0) {
+                try (ResultSet generatedKeys = pstmt.getGeneratedKeys()) {
+                    if (generatedKeys.next()) {
+                        System.out.println("Interest added successfully with ID: " + generatedKeys.getInt(1));
+                        return generatedKeys.getInt(1);
+                    }
+                }
+            }
+            throw new SQLException("Creating interest failed, no ID obtained.");
+        }
+    }
+
+    public static void displayInterests(Connection connection, int userId) throws SQLException {
+        String query = "SELECT id, interest FROM Interests WHERE user_id = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(query)) {
+            pstmt.setInt(1, userId);
+            try (ResultSet resultSet = pstmt.executeQuery()) {
+                System.out.println("Your interests:");
+                while (resultSet.next()) {
+                    int interestId = resultSet.getInt("id");
+                    String interest = resultSet.getString("interest");
+                    System.out.println("ID: " + interestId + ", Interest: " + interest);
+                }
+            }
+        }
+    }
+}
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.Scanner;
+
+public class LanguageDetector {
+
+    private static final String API_KEY = "6a733f6d65d9c3936cae20a686c9c945"; // کلید API خود را اینجا وارد کنید
+    private static final String API_URL = "https://ws.detectlanguage.com/0.2/detect";
+
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        System.out.print("Enter a word or phrase: ");
+        String text = scanner.nextLine();
+        scanner.close();
+
+        try {
+            String detectedLanguage = detectLanguage(text);
+            System.out.println("Detected language: " + detectedLanguage);
+        } catch (Exception e) {
+            System.err.println("Error detecting language: " + e.getMessage());
+        }
+    }
+
+    public static String detectLanguage(String text) throws Exception {
+        // ساخت بدنه درخواست JSON
+        String requestBody = String.format("{\"key\": \"%s\", \"q\": \"%s\"}", API_KEY, text);
+
+        // ایجاد اتصال HTTP
+        URL url = new URL(API_URL);
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setRequestMethod("POST");
+        connection.setRequestProperty("Content-Type", "application/json");
+        connection.setDoOutput(true);
+
+        // ارسال بدنه درخواست
+        try (OutputStream os = connection.getOutputStream()) {
+            byte[] input = requestBody.getBytes("utf-8");
+            os.write(input, 0, input.length);
+        }
+
+        
+        int responseCode = connection.getResponseCode();
+        if (responseCode == HttpURLConnection.HTTP_OK) {
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(connection.getInputStream(), "utf-8"))) {
+                StringBuilder response = new StringBuilder();
+                String responseLine;
+                while ((responseLine = br.readLine()) != null) {
+                    response.append(responseLine.trim());
+                }
+                // تجزیه پاسخ JSON
+                String responseBody = response.toString();
+                // استخراج زبان تشخیص داده شده از JSON
+                String languageCode = responseBody.split("\"language\":\"")[1].split("\"")[0];
+                return languageCode;
+            }
+        } else {
+            throw new Exception("API request failed with status code: " + responseCode);
+        }
+    }
+}
+import java.sql.*;
+
+public class User {
+    public static int getUserId(Connection connection, String name) throws SQLException {
+        String query = "SELECT id FROM Users WHERE name = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(query)) {
+            pstmt.setString(1, name);
+            try (ResultSet resultSet = pstmt.executeQuery()) {
+                if (resultSet.next()) {
+                    return resultSet.getInt("id");
+                }
+            }
+        }
+        return -1;
+    }
+
+    public static int registerUser(Connection connection, String name) throws SQLException {
+        String query = "INSERT INTO Users (name) VALUES (?)";
+        try (PreparedStatement pstmt = connection.prepareStatement(query, Statement.RETURN_GENERATED_KEYS)) {
+            pstmt.setString(1, name);
+            int affectedRows = pstmt.executeUpdate();
+            if (affectedRows > 0) {
+                try (ResultSet generatedKeys = pstmt.getGeneratedKeys()) {
+                    if (generatedKeys.next()) {
+                        return generatedKeys.getInt(1);
+                    }
+                }
+            }
+            throw new SQLException("Creating user failed, no ID obtained.");
+        }
+    }
+}

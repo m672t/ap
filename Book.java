@@ -1,4 +1,3 @@
-
 import java.sql.*;
 import java.util.HashSet;
 
@@ -42,7 +41,7 @@ public class Book {
         }
     }
 
-    public static void displayBooksByTopic(Connection connection, String topic) throws SQLException {
+    public static void displayBooksByTopic(Connection connection, String topic, StringBuilder booksList) throws SQLException {
         String query = "SELECT DISTINCT b.book_title FROM Books b " +
                        "JOIN Interests i ON b.interest_id = i.id " +
                        "WHERE i.interest = ?";
@@ -53,18 +52,17 @@ public class Book {
             if (!rs.isBeforeFirst()) {
                 System.out.println("No books found for the topic: " + topic);
             } else {
-                System.out.println("Books available in the topic '" + topic + "':");
                 while (rs.next()) {
                     String title = rs.getString("book_title");
                     try {
                         String language = LanguageDetector.detectLanguage(title);
-                        uniqueBooks.add(title+ " in " + language + " language");
+                        uniqueBooks.add(title + " in " + language + " language");
                     } catch (Exception e) {
                         uniqueBooks.add(title);
                     }
                 }
                 for (String title : uniqueBooks) {
-                    System.out.println("- " + title);
+                    booksList.append(title).append("\n");
                 }
             }
         }

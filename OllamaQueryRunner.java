@@ -5,15 +5,10 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.util.Scanner;
 import java.util.concurrent.TimeUnit;
 
 public class OllamaQueryRunner {
-
-    public static void main(String[] args) {
-        String prompt = "What is the capital of Iran?";
-        String response = runOllamaQuery(prompt);
-        System.out.println(response);
-    }
 
     public static String runOllamaQuery(String question) {
         ProcessBuilder processBuilder = new ProcessBuilder("ollama", "run", "llama3.2:1b");
@@ -22,14 +17,12 @@ public class OllamaQueryRunner {
         try {
             Process process = processBuilder.start();
 
-            
             try (OutputStream outputStream = process.getOutputStream();
                  PrintWriter writer = new PrintWriter(new OutputStreamWriter(outputStream))) {
                 writer.println(question);
                 writer.flush();
             }
 
-            
             StringBuilder output = new StringBuilder();
             try (InputStream inputStream = process.getInputStream();
                  BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
@@ -39,20 +32,17 @@ public class OllamaQueryRunner {
                 }
             }
 
-            
             boolean finished = process.waitFor(30, TimeUnit.SECONDS);
             if (!finished) {
                 process.destroy();
                 return "Error: The process timed out.";
             }
 
-            
             int exitCode = process.exitValue();
             if (exitCode != 0) {
                 return "Process ended with error code " + exitCode;
             }
 
-            
             String cleanedOutput = removeUnwantedChars(output.toString()).trim();
             return cleanedOutput;
 
@@ -62,19 +52,17 @@ public class OllamaQueryRunner {
         }
     }
 
-    
     private static String removeUnwantedChars(String input) {
-        StringBuilder cleanedOutput = new StringBuilder();
-        
-        for (char c : input.toCharArray()) {
-            
-            if (Character.isLetter(c) || Character.isWhitespace(c) || Character.isDigit(c) || c == '.') {
-                cleanedOutput.append(c);
-            }
-        }
-        
-        
-        String result = cleanedOutput.toString().replaceAll("\\s+", " ").trim();
-        return result;
+        String cleanedOutput = input.replaceAll("\u001B\\[[;\\d]*m", ""); 
+        cleanedOutput = cleanedOutput.replaceAll("\\[\\?25[lh]", "");
+        cleanedOutput = cleanedOutput.replaceAll("\\[2K|\\[1G", ""); 
+        cleanedOutput = cleanedOutput.replaceAll("[^\\p{Print}\\p{Space}]", "");
+        return cleanedOutput.replaceAll("\\s+", " ").trim();
+    }
+
+    private static String getUserInput() {
+        Scanner scanner = new Scanner(System.in);
+        System.out.print("Enter your prompt: ");
+        return scanner.nextLine();  
     }
 }
